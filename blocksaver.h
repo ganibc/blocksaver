@@ -56,6 +56,13 @@ public:
     bool Load();
     void Unload();
     bool IsLoaded() const;
+    std::vector<char> GiveupData()
+    {
+        std::vector<char> newContainer;
+        newContainer = std::move(m_Data);
+        Unload();
+        return newContainer;
+    }
     const std::vector<char>& Data() const
     {
         return m_Data;
@@ -120,6 +127,15 @@ public:
     using AddAndRemoveFileListPair = std::pair<std::vector<std::string>, std::vector<std::string>>;
 
     FileManager(FileDataOperationManager* operationManager);
+    void SetName(std::string name)
+    {
+        m_Name = std::move(name);
+    }
+
+    const std::string& GetName() const
+    {
+        return m_Name;
+    }
 
     //  save data to file and keep info in the cache
     bool AddFile(std::string filename, std::vector<char>&& data);
@@ -137,8 +153,8 @@ public:
 private:
     // std::unique_ptr<FileLister> m_FileLister;
     std::unique_ptr<FileDataOperationManager> m_FileOperationManager;
-
     std::unordered_map<std::string, std::shared_ptr<FileDataLoader>> m_Files;
+    std::string m_Name;
 };
 
 #endif // BLOCK_SAVER_H_
