@@ -2,6 +2,7 @@
 #include <dirent.h>
 #include <assert.h>
 #include <cstdio>
+#include <unordered_set>
 
 using namespace std;
 
@@ -201,44 +202,6 @@ bool FileDataOperationManager::DeleteFile(const std::string& filename)
     return std::remove((m_DirPath + filename).c_str()) == 0;
 }
 
-
-// FileLister::FileLister(std::string path, std::regex regex)
-//     : m_DirPath(std::move(path))
-//     , m_Regex(std::move(regex))
-// {
-//     if(m_DirPath.back() != '/')
-//     {
-//         m_DirPath += '/';
-//     }
-// }
-
-// std::vector<std::string> FileLister::GetFileList() const
-// {
-//     vector<string> files;
-//     DIR *dir;
-//     struct dirent *ent;
-//     if ((dir = opendir(m_DirPath.c_str())) != NULL)
-//     {
-//         while ((ent = readdir(dir)) != NULL)
-//         {
-//             if(ent->d_type == DT_REG)
-//             {
-//                 if(regex_match(ent->d_name, m_Regex))
-//                 {
-//                     files.push_back(m_DirPath + string(ent->d_name));
-//                 }
-//             }
-//         }
-//         closedir(dir);
-//     }
-//     else
-//     {
-//         //  TODO: add error/warning message here.
-//     }
-//     return files;
-// }
-
-
 FileManager::FileManager(FileDataOperationManager* operationManager)
     : m_FileOperationManager(operationManager)
 {
@@ -263,22 +226,43 @@ void FileManager::RemoveFile(const std::string& filename)
     m_FileOperationManager->DeleteFile(filename);
 }
 
-std::vector<std::string> FileManager::PoolFiles()
+FileManager::AddAndRemoveFileListPair FileManager::DiffFiles(bool updateCache)
 {
-    std::vector<std::string> newFiles;
+    AddAndRemoveFileListPair fileListPair;
+
+    std::vector<std::string>& newFiles = fileListPair.first;
+    std::vector<std::string>& removedFiles = fileListPair.second;
+
     auto fileList = m_FileOperationManager->GetFileList();
+    unordered_set<string> fileSet(fileList.begin(), fileList.end());
+    for(auto& filePair : m_Files)
+    {
+        auto& filename = filePair.first;
+        if(fileSet.count(filename) == 0)
+        {
+            removedFiles.push_back(filename);
+        }
+    }
+    if(updateCache)
+    {
+        for(auto& filename : removedFiles)
+        {
+            m_Files.erase(filename);            
+        }
+    }
+
     for(auto& filename : fileList)
     {
-        auto iter = m_Files.find(filename);
-        if(iter == m_Files.end() || iter->second == nullptr)
+        if(m_Files.count(filename) == 0)
         {
             auto fileDataLoader = m_FileOperationManager->GetFileDataLoader(filename);
             if(fileDataLoader != nullptr)
             {
-                m_Files[filename] = std::move(fileDataLoader);
+                if(updateCache)
+                    m_Files[filename] = std::move(fileDataLoader);
                 newFiles.push_back(filename);
             }
         }
     }
-    return newFiles;
+    return fileListPair;
 }

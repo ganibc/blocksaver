@@ -117,16 +117,18 @@ private:
 class FileManager
 {
 public:
+    using AddAndRemoveFileListPair = std::pair<std::vector<std::string>, std::vector<std::string>>;
+
     FileManager(FileDataOperationManager* operationManager);
 
     //  save data to file and keep info in the cache
     bool AddFile(std::string filename, std::vector<char>&& data);
+    void RemoveFile(const std::string& filename);
     
     //  list files from drive
     //  return new detected filenames
-    std::vector<std::string> PoolFiles();
+    AddAndRemoveFileListPair DiffFiles(bool updateCache = true);
 
-    void RemoveFile(const std::string& filename);
 
     const std::unordered_map<std::string, std::shared_ptr<FileDataLoader>>& GetFiles() const
     {
