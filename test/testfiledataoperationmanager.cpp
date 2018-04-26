@@ -32,7 +32,7 @@ TEST(FileDataOperationManager, metadata_eof_Ready)
 
 void CheckContent(FileDataOperationManager& manager, const std::string& filename, const std::vector<char>& expectedValue)
 {
-    auto loader = manager.GetFileDataLoader(filename);
+    auto loader = manager.GetDataHandler(filename);
     ASSERT_TRUE(loader != nullptr);
     EXPECT_FALSE(loader->IsLoaded());
     loader->Load();
@@ -70,14 +70,14 @@ TEST(FileDataOperationManager, ABC_XYZ_Save_Delete)
     std::string dataStr = "some input to save";
     {
         //  make sure no file.
-        manager.DeleteFile("temp.txt");
+        manager.DeleteData("temp.txt");
         std::vector<char> data(dataStr.begin(), dataStr.end());
-        auto loader = manager.SaveDataToFile("temp.txt", std::move(data), false);
+        auto loader = manager.StoreData("temp.txt", std::move(data), false);
         ASSERT_TRUE(loader != nullptr);
         EXPECT_TRUE(data.empty());
         EXPECT_TRUE(loader->IsLoaded());
         CheckContent(manager, "temp.txt", dataStr);
-        EXPECT_TRUE(manager.DeleteFile("temp.txt"));
+        EXPECT_TRUE(manager.DeleteData("temp.txt"));
     }
 }
 
@@ -87,13 +87,13 @@ TEST(FileDataOperationManager, metadata_eof_Save_Delete)
     std::string dataStr = "some input to save";
     {
         //  make sure no file.
-        manager.DeleteFile("temp.txt");
+        manager.DeleteData("temp.txt");
         std::vector<char> data(dataStr.begin(), dataStr.end());
-        auto loader = manager.SaveDataToFile("temp.txt", std::move(data), false);
+        auto loader = manager.StoreData("temp.txt", std::move(data), false);
         ASSERT_TRUE(loader != nullptr);
         EXPECT_TRUE(data.empty());
         EXPECT_TRUE(loader->IsLoaded());
         CheckContent(manager, "temp.txt", dataStr);
-        EXPECT_TRUE(manager.DeleteFile("temp.txt"));
+        EXPECT_TRUE(manager.DeleteData("temp.txt"));
     }
 }

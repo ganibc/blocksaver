@@ -8,7 +8,7 @@ using namespace std;
 class BlockSaverApp
 {
 public:
-    void Sync(FileManager::AddAndRemoveFileListPair& diffResult, FileManager& sourceManager, FileManager& destManager)
+    void Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataManager& sourceManager, DataManager& destManager)
     {
             if(!diffResult.first.empty())
             {
@@ -21,11 +21,11 @@ public:
                 cout << destManager.GetName() << " syncing\n";
                 for(auto& filename : diffResult.first)
                 {
-                    if(destManager.GetFiles().count(filename) == 0)
+                    if(destManager.GetDataHandles().count(filename) == 0)
                     {
-                        auto& loader = sourceManager.GetFiles().at(filename);
+                        auto& loader = sourceManager.GetDataHandles().at(filename);
                         loader->Load();
-                        destManager.AddFile(filename, loader->GiveupData());
+                        destManager.AddData(filename, loader->GiveupData());
                         cout  << "  - " << filename << " copied\n";
                     }
                 }
@@ -40,9 +40,9 @@ public:
                 cout << destManager.GetName() << " syncing\n";
                 for(auto& filename : diffResult.second)
                 {
-                    if(destManager.GetFiles().count(filename) > 0)
+                    if(destManager.GetDataHandles().count(filename) > 0)
                     {
-                        destManager.RemoveFile(filename);
+                        destManager.RemoveData(filename);
                         cout  << "  - " << filename << " removed\n";
                     }
                 }                
@@ -53,16 +53,16 @@ public:
     {
         m_Run = true;
         auto fileOperationManager = new FileDataOperationManager("/home/gani/work/temp/", {'G', 'B', 'T'}, {'G', 'B', 'T'});
-        FileManager manager(fileOperationManager);
+        DataManager manager(fileOperationManager);
         manager.SetName("Manager 1");
         auto fileOperationManager2 = new FileDataOperationManager("/home/gani/work/temp2/", {}, {'\n', 'E', 'O', 'F'});
-        FileManager manager2(fileOperationManager2);
+        DataManager manager2(fileOperationManager2);
         manager2.SetName("Manager 2");
         
         while(m_Run)
         {
-            auto diffResult = manager.DiffFiles();
-            auto diffResult2 = manager2.DiffFiles();
+            auto diffResult = manager.DiffDataHandles();
+            auto diffResult2 = manager2.DiffDataHandles();
             Sync(diffResult, manager, manager2);
             Sync(diffResult2, manager2, manager);
 

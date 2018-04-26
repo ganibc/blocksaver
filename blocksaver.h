@@ -11,48 +11,41 @@
 #include <stdint.h>
 #include <regex>
 
-class DataCache
+class DataHandlerLoadOperationBase
 {
 public:
+    virtual std::string Id() const = 0;
+    virtual bool DoLoad(std::vector<char>& outData) = 0;
+};
+
+class DataHandlerLoadOperationFile : public DataHandlerLoadOperationBase
+{
+public:
+    bool DoLoad(std::vector<char>& outData) override;
+    const std::string& GetFilename() const
+    {
+        return m_Filename;
+    }
+    std::string Id() const override
+    {
+        return GetFilename();
+    }
+
 private:
-    std::string m_Id;
-    std::vector<char> m_Data;
-    uint64_t timestamp;
+    friend class FileDataOperationManager;
+    DataHandlerLoadOperationFile(std::string filename, int startOffset, int dataSize);
+
+    std::string m_Filename;
+    int m_StartOffset;
+    int m_DataSize;
 };
 
-using DataCachePtr = std::shared_ptr<DataCache>;
-
-class DataCacher
+class DataHandler
 {
 public:
-private:
-    std::unordered_map<std::string, DataCachePtr> m_CachedData;
-    std::vector<DataCachePtr> m_NewCachedData;
-};
+    DataHandler(DataHandlerLoadOperationBase* loadOperation);
+    DataHandler(DataHandlerLoadOperationBase* loadOperation, std::vector<char>&& data);
 
-class DataUploader
-{
-
-};
-
-class MetadataFileReader
-{
-public:
-private:
-};
-
-class BlockFileReader
-{
-public:
-    BlockFileReader(std::string metadataFilename);
-    DataCachePtr Run();
-private:
-    std::string m_MetadataFilename;
-};
-
-class FileDataLoader
-{
-public:
     bool Load();
     void Unload();
     bool IsLoaded() const;
@@ -75,32 +68,12 @@ public:
         return m_Data;
     }
 
-    const std::string& GetFilename() const
-    {
-        return m_Filename;
-    }
 private:
-    friend class FileDataOperationManager;
-    FileDataLoader(std::string&& filename, int startOffset, int dataSize);
-    FileDataLoader(std::string&& filename, std::vector<char>&& data, int startOffset);
 
-    std::string m_Filename;
+    std::unique_ptr<DataHandlerLoadOperationBase> m_LoadOperation;
     std::vector<char> m_Data;
-    int m_StartOffset;
-    int m_DataSize;
     bool m_Loaded;
 };
-
-
-// class FileLister
-// {
-// public:
-//     FileLister(std::string path, std::regex regex = std::regex(".*"));
-//     std::vector<std::string> GetFileList() const;
-// private:
-//     std::string m_DirPath;
-//     std::regex m_Regex;
-// };
 
 class FileDataOperationManager
 {
@@ -108,25 +81,49 @@ public:
 
     FileDataOperationManager(std::string path, std::vector<char> filePrefix, std::vector<char> filePosfix);
 
-    std::unique_ptr<FileDataLoader> GetFileDataLoader(std::string filename) const;
+    std::unique_ptr<DataHandler> GetDataHandler(std::string id) const;
+    std::vector<std::string> GetDataList(std::regex regex = std::regex(".*"), bool checkNotation = false) const;
+    std::unique_ptr<DataHandler> StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite = false) const;
+    bool DeleteData(const std::string& id);
+
     int GetFileDataSize(const std::string& filename) const;
     bool IsFileReadyToLoad(const std::string& filename) const;
-    std::vector<std::string> GetFileList(std::regex regex = std::regex(".*"), bool checkNotation = false) const;
 
-    std::unique_ptr<FileDataLoader> SaveDataToFile(std::string filename, std::vector<char>&& data, bool forceOverwrite = false) const;
-    bool DeleteFile(const std::string& filename);
 private:
     std::string m_DirPath;
     std::vector<char> m_FilePrefix;
     std::vector<char> m_FilePostfix;
 };
 
-class FileManager
+class MysqlDataOperationManager
 {
 public:
-    using AddAndRemoveFileListPair = std::pair<std::vector<std::string>, std::vector<std::string>>;
 
-    FileManager(FileDataOperationManager* operationManager);
+    MysqlDataOperationManager(std::string ip, int port, std::string username, std::string password, std::string dbname);
+
+    std::unique_ptr<DataHandler> GetDataHandler(std::string id) const;
+    std::vector<std::string> GetDataList(std::regex regex = std::regex(".*"), bool checkNotation = false) const;
+    std::unique_ptr<DataHandler> StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite = false) const;
+    bool DeleteData(const std::string& id);
+private:
+    std::string m_DBName;
+};
+
+class DataManager
+{
+public:
+    using AddAndRemoveDataListPair = std::pair<std::vector<std::string>, std::vector<std::string>>;
+
+    DataManager(FileDataOperationManager* operationManager);
+    //  store data persistently and keep info in the cache
+    bool AddData(std::string id, std::vector<char>&& data);
+    //  remove data from persistent storage and cache
+    void RemoveData(const std::string& id);
+    
+    //  list files from drive
+    //  return new detected filenames
+    AddAndRemoveDataListPair DiffDataHandles(bool updateCache = true);
+
     void SetName(std::string name)
     {
         m_Name = std::move(name);
@@ -137,23 +134,14 @@ public:
         return m_Name;
     }
 
-    //  save data to file and keep info in the cache
-    bool AddFile(std::string filename, std::vector<char>&& data);
-    void RemoveFile(const std::string& filename);
-    
-    //  list files from drive
-    //  return new detected filenames
-    AddAndRemoveFileListPair DiffFiles(bool updateCache = true);
-
-
-    const std::unordered_map<std::string, std::shared_ptr<FileDataLoader>>& GetFiles() const
+    const std::unordered_map<std::string, std::shared_ptr<DataHandler>>& GetDataHandles() const
     {
-        return m_Files;
+        return m_DataHandles;
     }
 private:
     // std::unique_ptr<FileLister> m_FileLister;
     std::unique_ptr<FileDataOperationManager> m_FileOperationManager;
-    std::unordered_map<std::string, std::shared_ptr<FileDataLoader>> m_Files;
+    std::unordered_map<std::string, std::shared_ptr<DataHandler>> m_DataHandles;
     std::string m_Name;
 };
 

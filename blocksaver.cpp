@@ -6,56 +6,60 @@
 
 using namespace std;
 
-
-BlockFileReader::BlockFileReader(std::string metadataFilename)
-{
-
-}
-
-DataCachePtr BlockFileReader::Run()
-{
-    return make_shared<DataCache>();
-}
-
-FileDataLoader::FileDataLoader(std::string&& filename, int startOffset, int dataSize)
+DataHandlerLoadOperationFile::DataHandlerLoadOperationFile(std::string filename, int startOffset, int dataSize)
     : m_Filename(std::move(filename))
     , m_StartOffset(startOffset)
     , m_DataSize(dataSize)
+{
+    
+}
+
+bool DataHandlerLoadOperationFile::DoLoad(std::vector<char>& outData)
+{
+    ifstream ifile(m_Filename.c_str());
+    if(!ifile.is_open())
+        return false;
+    outData.resize(m_DataSize);
+    ifile.seekg(m_StartOffset, ifile.beg);
+    ifile.read(outData.data(), m_DataSize);
+    return true;
+}
+
+DataHandler::DataHandler(DataHandlerLoadOperationBase* loadOperation)
+    : m_LoadOperation(loadOperation)
     , m_Loaded(false)
 {
 
 }
 
-FileDataLoader::FileDataLoader(std::string&& filename, std::vector<char>&& data, int startOffset)
-    : m_Filename(std::move(filename))
+DataHandler::DataHandler(DataHandlerLoadOperationBase* loadOperation, std::vector<char>&& data)
+    : m_LoadOperation(loadOperation)
     , m_Data(std::move(data))
-    , m_StartOffset(startOffset)
     , m_Loaded(true)
 {
-    m_DataSize = m_Data.size();
 }
 
-bool FileDataLoader::Load()
+bool DataHandler::Load()
 {
-    m_Loaded = false;
-    ifstream ifile(m_Filename.c_str());
-    if(!ifile.is_open())
-        return false;
-    m_Data.resize(m_DataSize);
-    ifile.seekg(m_StartOffset, ifile.beg);
-    ifile.read(m_Data.data(), m_DataSize);
-    m_Loaded = true;
+    if(!m_Loaded)
+    {
+        if(!m_LoadOperation->DoLoad(m_Data))
+        {
+            return false;
+        }
+        m_Loaded = true;
+    }
     return true;
 }
 
-void FileDataLoader::Unload()
+void DataHandler::Unload()
 {
     m_Data.clear();
     m_Data.shrink_to_fit();
     m_Loaded = false;
 }
 
-bool FileDataLoader::IsLoaded() const
+bool DataHandler::IsLoaded() const
 {
     return m_Loaded;
 }
@@ -67,7 +71,7 @@ FileDataOperationManager::FileDataOperationManager(std::string path, std::vector
 {
 }
 
-std::vector<std::string> FileDataOperationManager::GetFileList(std::regex regex, bool checkNotation) const
+std::vector<std::string> FileDataOperationManager::GetDataList(std::regex regex, bool checkNotation) const
 {
     vector<string> files;
     DIR *dir;
@@ -108,13 +112,15 @@ std::vector<std::string> FileDataOperationManager::GetFileList(std::regex regex,
 }
 
 
-std::unique_ptr<FileDataLoader> FileDataOperationManager::GetFileDataLoader(std::string filename) const
+std::unique_ptr<DataHandler> FileDataOperationManager::GetDataHandler(std::string id) const
 {
-    unique_ptr<FileDataLoader> fileDataResult;
+    unique_ptr<DataHandler> fileDataResult;
+    std::string& filename = id;
     int dataSize = GetFileDataSize(filename);
     if(dataSize >= 0)
     {
-        fileDataResult = unique_ptr<FileDataLoader>(new FileDataLoader(std::move(m_DirPath + filename), m_FilePrefix.size(), dataSize));
+        auto fileOperation = new DataHandlerLoadOperationFile(std::move(m_DirPath + filename), m_FilePrefix.size(), dataSize);
+        fileDataResult = make_unique<DataHandler>(fileOperation);
     }
     return fileDataResult;
 }
@@ -161,13 +167,14 @@ int FileDataOperationManager::GetFileDataSize(const std::string& filename) const
 
 bool FileDataOperationManager::IsFileReadyToLoad(const std::string& filename) const
 {
+    //  GetFileDataSize will add the path
     return GetFileDataSize(filename) >= 0;
 }
 
-std::unique_ptr<FileDataLoader> FileDataOperationManager::SaveDataToFile(std::string filename, std::vector<char>&& data, bool forceOverwrite) const
+std::unique_ptr<DataHandler> FileDataOperationManager::StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite) const
 {
-    filename = m_DirPath + filename;
-    std::unique_ptr<FileDataLoader> result;
+    std::string filename = m_DirPath + id;
+    std::unique_ptr<DataHandler> result;
     bool fileExisted = false;
     {
         ifstream ifile(filename.c_str());
@@ -189,7 +196,8 @@ std::unique_ptr<FileDataLoader> FileDataOperationManager::SaveDataToFile(std::st
     ofile.write(data.data(), data.size());
     ofile.write(m_FilePostfix.data(), m_FilePostfix.size());
     ofile.flush();
-    result = unique_ptr<FileDataLoader>(new FileDataLoader(std::move(filename), std::move(data), m_FilePrefix.size()));
+    auto fileOperation = new DataHandlerLoadOperationFile(std::move(filename), m_FilePrefix.size(), data.size());    
+    result = make_unique<DataHandler>(fileOperation, std::move(data));
     if(fileExisted)
     {
         //  TODO: warn that existing file is overwritten
@@ -197,45 +205,45 @@ std::unique_ptr<FileDataLoader> FileDataOperationManager::SaveDataToFile(std::st
     return result;
 }
 
-bool FileDataOperationManager::DeleteFile(const std::string& filename)
+bool FileDataOperationManager::DeleteData(const std::string& id)
 {
-    return std::remove((m_DirPath + filename).c_str()) == 0;
+    return std::remove((m_DirPath + id).c_str()) == 0;
 }
 
-FileManager::FileManager(FileDataOperationManager* operationManager)
+DataManager::DataManager(FileDataOperationManager* operationManager)
     : m_FileOperationManager(operationManager)
 {
 }
 
-bool FileManager::AddFile(std::string filename, std::vector<char>&& data)
+bool DataManager::AddData(std::string id, std::vector<char>&& data)
 {
-    if(m_Files.count(filename))
+    if(m_DataHandles.count(id))
         return false;   //  loader already exists
-    auto fileDataLoader = m_FileOperationManager->SaveDataToFile(filename, std::move(data), false);
+    auto fileDataLoader = m_FileOperationManager->StoreData(id, std::move(data), false);
     if(fileDataLoader == nullptr)
     {
         return false;   //  file already exists, but loader is not
     }
-    m_Files[filename] = std::move(fileDataLoader);
+    m_DataHandles[id] = std::move(fileDataLoader);
     return true;
 }
 
-void FileManager::RemoveFile(const std::string& filename)
+void DataManager::RemoveData(const std::string& id)
 {
-    m_Files.erase(filename);
-    m_FileOperationManager->DeleteFile(filename);
+    m_DataHandles.erase(id);
+    m_FileOperationManager->DeleteData(id);
 }
 
-FileManager::AddAndRemoveFileListPair FileManager::DiffFiles(bool updateCache)
+DataManager::AddAndRemoveDataListPair DataManager::DiffDataHandles(bool updateCache)
 {
-    AddAndRemoveFileListPair fileListPair;
+    AddAndRemoveDataListPair dataListPair;
 
-    std::vector<std::string>& newFiles = fileListPair.first;
-    std::vector<std::string>& removedFiles = fileListPair.second;
+    std::vector<std::string>& newFiles = dataListPair.first;
+    std::vector<std::string>& removedFiles = dataListPair.second;
 
-    auto fileList = m_FileOperationManager->GetFileList();
+    auto fileList = m_FileOperationManager->GetDataList();
     unordered_set<string> fileSet(fileList.begin(), fileList.end());
-    for(auto& filePair : m_Files)
+    for(auto& filePair : m_DataHandles)
     {
         auto& filename = filePair.first;
         if(fileSet.count(filename) == 0)
@@ -247,22 +255,22 @@ FileManager::AddAndRemoveFileListPair FileManager::DiffFiles(bool updateCache)
     {
         for(auto& filename : removedFiles)
         {
-            m_Files.erase(filename);            
+            m_DataHandles.erase(filename);            
         }
     }
 
     for(auto& filename : fileList)
     {
-        if(m_Files.count(filename) == 0)
+        if(m_DataHandles.count(filename) == 0)
         {
-            auto fileDataLoader = m_FileOperationManager->GetFileDataLoader(filename);
+            auto fileDataLoader = m_FileOperationManager->GetDataHandler(filename);
             if(fileDataLoader != nullptr)
             {
                 if(updateCache)
-                    m_Files[filename] = std::move(fileDataLoader);
+                    m_DataHandles[filename] = std::move(fileDataLoader);
                 newFiles.push_back(filename);
             }
         }
     }
-    return fileListPair;
+    return dataListPair;
 }
