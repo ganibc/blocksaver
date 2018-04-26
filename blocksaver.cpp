@@ -51,21 +51,28 @@ DataHandlerLoadOperationMysql::~DataHandlerLoadOperationMysql()
 
 bool DataHandlerLoadOperationMysql::DoLoad(std::vector<char>& outData)
 {    
-    mysql_stmt_execute(m_Statement);
+    if(mysql_stmt_execute(m_Statement))
+        return false;
     MYSQL_BIND bindResult[1];
     memset(bindResult, 0, sizeof(bindResult));
 
     unsigned long dataLen = 0;
     bindResult[0].buffer_type = MYSQL_TYPE_LONG_BLOB;
     bindResult[0].length = &dataLen;    
-    mysql_stmt_bind_result(m_Statement, bindResult);
+    if(mysql_stmt_bind_result(m_Statement, bindResult))
+    {
+        return false;
+    }
     
-    mysql_stmt_fetch(m_Statement);
+    if(mysql_stmt_fetch(m_Statement))
+    {
+        return false;
+    }
 
     outData.resize(dataLen);
     bindResult[0].buffer = outData.data();
     bindResult[0].buffer_length = outData.size();
-    mysql_stmt_fetch_column(m_Statement, bindResult, 0, 0);
+    return mysql_stmt_fetch_column(m_Statement, bindResult, 0, 0) > 0;
 }
 
 
