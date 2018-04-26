@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <regex>
+#include <mysql.h>
 
 class DataHandlerLoadOperationBase
 {
@@ -38,6 +39,45 @@ private:
     std::string m_Filename;
     int m_StartOffset;
     int m_DataSize;
+};
+
+struct StatementCloser
+{
+    StatementCloser()
+        : statement(nullptr)
+    {
+    }
+
+    ~StatementCloser()
+    {
+        if(statement)
+        {
+            mysql_stmt_close(statement);
+        }
+    }
+
+    MYSQL_STMT* statement;
+};
+
+class DataHandlerLoadOperationMysql : public DataHandlerLoadOperationBase
+{
+public:
+    ~DataHandlerLoadOperationMysql();
+    bool DoLoad(std::vector<char>& outData) override;
+    std::string Id() const override
+    {
+        return m_ID;
+    }
+
+private:
+    friend class MysqlDataOperationManager;
+    DataHandlerLoadOperationMysql(MYSQL* connection, std::string id);
+
+    MYSQL* m_Connection;
+    std::string m_ID;
+    MYSQL_STMT* m_Statement;
+    MYSQL_BIND m_BindParam[1];
+    StatementCloser m_StatementCloser;
 };
 
 class DataHandler
@@ -75,16 +115,25 @@ private:
     bool m_Loaded;
 };
 
-class FileDataOperationManager
+class DataOperationManagerBase
+{
+public:
+    virtual std::unique_ptr<DataHandler> GetDataHandler(std::string id) const = 0;
+    virtual std::vector<std::string> GetDataList(std::regex regex = std::regex(".*"), bool checkNotation = false) const = 0;
+    virtual std::unique_ptr<DataHandler> StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite = false)= 0;
+    virtual bool DeleteData(const std::string& id) = 0;
+};
+
+class FileDataOperationManager : public DataOperationManagerBase
 {
 public:
 
     FileDataOperationManager(std::string path, std::vector<char> filePrefix, std::vector<char> filePosfix);
 
-    std::unique_ptr<DataHandler> GetDataHandler(std::string id) const;
-    std::vector<std::string> GetDataList(std::regex regex = std::regex(".*"), bool checkNotation = false) const;
-    std::unique_ptr<DataHandler> StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite = false) const;
-    bool DeleteData(const std::string& id);
+    std::unique_ptr<DataHandler> GetDataHandler(std::string id) const override;
+    std::vector<std::string> GetDataList(std::regex regex = std::regex(".*"), bool checkNotation = false) const override;
+    std::unique_ptr<DataHandler> StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite = false) override;
+    bool DeleteData(const std::string& id) override;
 
     int GetFileDataSize(const std::string& filename) const;
     bool IsFileReadyToLoad(const std::string& filename) const;
@@ -95,18 +144,21 @@ private:
     std::vector<char> m_FilePostfix;
 };
 
-class MysqlDataOperationManager
+class MysqlDataOperationManager : public DataOperationManagerBase
 {
 public:
 
-    MysqlDataOperationManager(std::string ip, int port, std::string username, std::string password, std::string dbname);
+    MysqlDataOperationManager(MYSQL* mysqlConnection, std::string tablename);
 
-    std::unique_ptr<DataHandler> GetDataHandler(std::string id) const;
-    std::vector<std::string> GetDataList(std::regex regex = std::regex(".*"), bool checkNotation = false) const;
-    std::unique_ptr<DataHandler> StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite = false) const;
-    bool DeleteData(const std::string& id);
+    std::unique_ptr<DataHandler> GetDataHandler(std::string id) const override;
+    std::vector<std::string> GetDataList(std::regex regex = std::regex(".*"), bool checkNotation = false) const override;
+    std::unique_ptr<DataHandler> StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite = false) override;
+    bool DeleteData(const std::string& id) override;
+
+    bool IsExists(const std::string& id) const;
 private:
-    std::string m_DBName;
+    MYSQL* m_Connection;
+    std::string m_TableName;
 };
 
 class DataManager
@@ -114,7 +166,7 @@ class DataManager
 public:
     using AddAndRemoveDataListPair = std::pair<std::vector<std::string>, std::vector<std::string>>;
 
-    DataManager(FileDataOperationManager* operationManager);
+    DataManager(DataOperationManagerBase* operationManager);
     //  store data persistently and keep info in the cache
     bool AddData(std::string id, std::vector<char>&& data);
     //  remove data from persistent storage and cache
@@ -140,7 +192,7 @@ public:
     }
 private:
     // std::unique_ptr<FileLister> m_FileLister;
-    std::unique_ptr<FileDataOperationManager> m_FileOperationManager;
+    std::unique_ptr<DataOperationManagerBase> m_FileOperationManager;
     std::unordered_map<std::string, std::shared_ptr<DataHandler>> m_DataHandles;
     std::string m_Name;
 };
