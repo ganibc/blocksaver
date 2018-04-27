@@ -1,0 +1,242 @@
+#include "dataoperation_mysql.h"
+
+using namespace std;
+
+DataHandlerLoadOperationMysql::DataHandlerLoadOperationMysql(MYSQL* connection, std::string id)
+    : m_Connection(connection)
+    , m_ID(id)
+{
+    m_Statement = mysql_stmt_init(m_Connection);
+    m_StatementCloser.statement = m_Statement;
+
+    string selectStatement = "SELECT data FROM filedata WHERE id=?";
+    mysql_stmt_prepare(m_Statement, selectStatement.c_str(), selectStatement.length());
+
+    memset(m_BindParam, 0, sizeof(m_BindParam));
+
+    m_BindParam[0].buffer_type = MYSQL_TYPE_STRING;
+    m_BindParam[0].buffer = (void*)m_ID.c_str();
+    m_BindParam[0].buffer_length = m_ID.length();
+    mysql_stmt_bind_param(m_Statement, m_BindParam);
+
+}
+
+DataHandlerLoadOperationMysql::~DataHandlerLoadOperationMysql()
+{
+}
+
+
+bool DataHandlerLoadOperationMysql::DoLoad(std::vector<char>& outData)
+{    
+    if(mysql_stmt_execute(m_Statement))
+        return false;
+
+    my_bool updateMaxLenFlag = true;
+    mysql_stmt_attr_set(m_Statement, STMT_ATTR_UPDATE_MAX_LENGTH, &updateMaxLenFlag);
+    mysql_stmt_store_result(m_Statement);
+
+    unsigned long dataLen = 0;
+    MYSQL_BIND bindResult[1];
+    memset(bindResult, 0, sizeof(bindResult));
+    bindResult[0].buffer_type = MYSQL_TYPE_LONG_BLOB;
+    bindResult[0].length = &dataLen;    
+    if(mysql_stmt_bind_result(m_Statement, bindResult))
+    {
+        return false;
+    }
+
+    auto fetchRes = mysql_stmt_fetch(m_Statement);
+    if(fetchRes && fetchRes != MYSQL_DATA_TRUNCATED)
+    {
+        return false;
+    }
+
+    outData.resize(dataLen);
+    bindResult[0].buffer = outData.data();
+    bindResult[0].buffer_length = outData.size();
+    auto fetchColRes = mysql_stmt_fetch_column(m_Statement, bindResult, 0, 0);
+    return fetchColRes == 0;
+}
+
+
+
+MysqlDataOperationManager::MysqlDataOperationManager(MYSQL* mysqlConnection, std::string tablename)
+    : m_Connection(mysqlConnection)
+    , m_TableName(std::move(tablename))
+{
+
+}
+
+bool MysqlDataOperationManager::IsExists(const std::string& id) const
+{
+    MYSQL_STMT* selectStatement = mysql_stmt_init(m_Connection);
+
+    StatementCloser closer;
+    closer.statement = selectStatement;
+
+    std::string statementStr("SELECT id FROM filedata WHERE id=?");
+    if(mysql_stmt_prepare(selectStatement, statementStr.c_str(), statementStr.length()))
+    {
+        return false;
+    }
+    
+    MYSQL_BIND bindParam[1];
+    memset(bindParam, 0, sizeof(bindParam));
+
+    bindParam[0].buffer_type = MYSQL_TYPE_STRING;
+    bindParam[0].buffer = (void*)id.c_str();
+    bindParam[0].buffer_length = id.length();
+    if(mysql_stmt_bind_param(selectStatement, bindParam))
+    {
+        return false;
+    }
+    if(mysql_stmt_execute(selectStatement))
+    {
+        return false;
+    }
+    mysql_stmt_store_result(selectStatement);
+    auto rowCount = mysql_stmt_num_rows(selectStatement);
+    return rowCount > 0;
+}
+
+
+std::unique_ptr<DataHandler> MysqlDataOperationManager::GetDataHandler(std::string id) const
+{
+    std::unique_ptr<DataHandler> result;
+
+    if(IsExists(id))
+    {
+        auto mysqlOperation = new DataHandlerLoadOperationMysql(m_Connection, id);
+        result = make_unique<DataHandler>(mysqlOperation);
+    }
+
+    return result;
+}
+
+std::vector<std::string> MysqlDataOperationManager::GetDataList(std::regex regex, bool checkNotation) const
+{
+    std::vector<std::string> result;
+
+    MYSQL_STMT* selectStatement = mysql_stmt_init(m_Connection);
+
+    StatementCloser closer;
+    closer.statement = selectStatement;
+
+    std::string statementStr("SELECT id FROM filedata");
+    if(mysql_stmt_prepare(selectStatement, statementStr.c_str(), statementStr.length()))
+    {
+        return result;
+    }
+
+    MYSQL_BIND bindResult[1];
+    memset(bindResult, 0, sizeof(bindResult));
+
+    char idBuffer[256];
+
+    bindResult[0].buffer_type = MYSQL_TYPE_STRING;
+    bindResult[0].buffer = idBuffer;
+    bindResult[0].buffer_length = sizeof(idBuffer);
+    if (mysql_stmt_bind_result(selectStatement, bindResult))
+    {
+        return result;
+    }
+    
+    if(mysql_stmt_execute(selectStatement))
+    {
+        return result;
+    }
+    mysql_stmt_store_result(selectStatement);
+
+    while (!mysql_stmt_fetch(selectStatement))
+    {
+        result.emplace_back(idBuffer);
+    }
+
+    return result;
+}
+
+std::unique_ptr<DataHandler> MysqlDataOperationManager::StoreData(std::string id, std::vector<char>&& data, bool forceOverwrite)
+{
+    std::unique_ptr<DataHandler> result;
+
+    bool rowExisted = IsExists(id);
+    if(rowExisted && !forceOverwrite)
+    {
+        //  TODO: warning file existed and not force overwrite
+        return result;
+    }
+    
+    MYSQL_STMT* insertStatement = mysql_stmt_init(m_Connection);
+    StatementCloser closer;
+    closer.statement = insertStatement;
+    
+    std::string insertStatementStr("INSERT INTO filedata(id, data) VALUES (?, ?)");
+    if(mysql_stmt_prepare(insertStatement, insertStatementStr.c_str(), insertStatementStr.length()))
+    {
+        return result;
+    }
+
+    MYSQL_BIND bindParam[2];
+    memset(bindParam, 0, sizeof(bindParam));
+
+    auto idLen = id.length();
+    bindParam[0].buffer_type = MYSQL_TYPE_STRING;
+    bindParam[0].buffer = (void*)id.c_str();
+    bindParam[0].buffer_length = idLen;
+    bindParam[0].length = &idLen;    
+
+    auto dataSize = data.size();
+    bindParam[1].buffer_type = MYSQL_TYPE_LONG_BLOB;
+    bindParam[1].buffer = data.data();
+    bindParam[1].buffer_length = dataSize;
+    bindParam[1].length = &dataSize;
+    
+    if (mysql_stmt_bind_param(insertStatement, bindParam))
+    {
+        return result;
+    }
+
+    if (mysql_stmt_execute(insertStatement))
+    {
+        return result;
+    }
+
+    auto mysqlOperation = new DataHandlerLoadOperationMysql(m_Connection, id);
+    result = make_unique<DataHandler>(mysqlOperation, std::move(data));
+
+    return result;
+}
+
+bool MysqlDataOperationManager::DeleteData(const std::string& id)
+{
+    MYSQL_STMT* deleteStatement = mysql_stmt_init(m_Connection);
+    StatementCloser closer;
+    closer.statement = deleteStatement;
+    
+    std::string deleteStatementStr("DELETE FROM filedata WHERE id=?");
+    if(mysql_stmt_prepare(deleteStatement, deleteStatementStr.c_str(), deleteStatementStr.length()))
+    {
+        return false;
+    }
+
+    MYSQL_BIND bindParam[1];
+    memset(bindParam, 0, sizeof(bindParam));
+
+    auto idLen = id.length();
+    bindParam[0].buffer_type = MYSQL_TYPE_STRING;
+    bindParam[0].buffer = (void*)id.c_str();
+    bindParam[0].buffer_length = idLen;
+    bindParam[0].length = &idLen;    
+    if (mysql_stmt_bind_param(deleteStatement, bindParam))
+    {
+        return false;
+    }
+
+    if (mysql_stmt_execute(deleteStatement))
+    {
+        return false;
+    }
+    auto affectedRow = mysql_stmt_affected_rows(deleteStatement);
+    
+    return affectedRow > 0;
+}
