@@ -49,7 +49,10 @@ class MysqlDataOperationManager : public DataOperationManagerBase
 {
 public:
 
+    MysqlDataOperationManager(const std::string& server, const std::string& username, const std::string& password
+                    , const std::string& dbname, std::string tablename, int port = 0);
     MysqlDataOperationManager(MYSQL* mysqlConnection, std::string tablename);
+    ~MysqlDataOperationManager();
 
     std::unique_ptr<DataHandler> GetDataHandler(std::string id) const override;
     std::vector<std::string> GetDataList(std::regex regex = std::regex(".*"), bool checkNotation = false) const override;
@@ -58,6 +61,7 @@ public:
 
     bool IsExists(const std::string& id) const;
 private:
+    bool m_ownConnection;
     MYSQL* m_Connection;
     std::string m_TableName;
 };

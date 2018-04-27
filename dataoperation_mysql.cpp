@@ -61,13 +61,36 @@ bool DataHandlerLoadOperationMysql::DoLoad(std::vector<char>& outData)
     return fetchColRes == 0;
 }
 
+MysqlDataOperationManager::MysqlDataOperationManager(const std::string& server, const std::string& username, const std::string& password, const std::string& dbname, std::string tablename, int port)
+    : m_Connection(nullptr)
+    , m_TableName(std::move(tablename))
+    , m_ownConnection(true)
+{
+    m_Connection = mysql_init(NULL);
+    if(!mysql_real_connect(m_Connection, server.c_str(), username.c_str()
+        , password.c_str(), dbname.c_str(), port, NULL, 0))
+    {
+        mysql_close(m_Connection);
+        m_Connection = nullptr;
+    }
 
+}
 
 MysqlDataOperationManager::MysqlDataOperationManager(MYSQL* mysqlConnection, std::string tablename)
     : m_Connection(mysqlConnection)
     , m_TableName(std::move(tablename))
+    , m_ownConnection(false)
 {
 
+}
+
+MysqlDataOperationManager::~MysqlDataOperationManager()
+{
+    if(m_ownConnection && m_Connection)
+    {
+        mysql_close(m_Connection);
+        m_Connection = nullptr;
+    }
 }
 
 bool MysqlDataOperationManager::IsExists(const std::string& id) const

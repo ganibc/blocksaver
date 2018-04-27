@@ -4,7 +4,7 @@ file(GLOB SOURCES *.cpp)
 
 include_directories(/usr/include/mysql/)
 add_executable(blocksaver ${SOURCES})
-target_link_libraries(blocksaver pthread mysqlclient)
+target_link_libraries(blocksaver pthread mysqlclient config++ )
 
 
 include_directories(./)

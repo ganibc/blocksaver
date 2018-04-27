@@ -1,8 +1,15 @@
 #include "blocksaver.h"
 
+
 void SyncWorker::DoDiffs()
 {
-    diffResult = dataManager->DiffDataHandles();
+    auto start = std::chrono::system_clock::now();
+    auto lastUpdatedDuration = start - lastEndDiff;
+    if(lastUpdatedDuration >= diffPeriod)
+    {
+        diffResult = dataManager->DiffDataHandles();
+        lastEndDiff = std::chrono::system_clock::now();
+    }
 }
 
 SyncManager::SyncManager()
@@ -18,10 +25,6 @@ void SyncManager::Run()
     //  loop every 500 ms
     std::chrono::milliseconds loopPeriod(500);
     auto lastStart = std::chrono::system_clock::now();            
-    for(auto& worker : m_workers)
-    {
-        worker->lastEndDiff = lastStart;
-    }
 
     //  if re-create threads every loop is not fast enough, then might need to write thread pool
     while(m_KeepRun)
@@ -52,6 +55,17 @@ void SyncManager::AddWorker(DataManager* dataManager, std::chrono::duration<doub
     worker->dataManager = std::unique_ptr<DataManager>(dataManager);
     worker->diffPeriod = diffPeriod;
     m_workers.emplace_back(worker);
+}
+
+void SyncManager::DoInit()
+{
+    auto lastStart = std::chrono::system_clock::now() - std::chrono::hours(24);            
+    for(auto& worker : m_workers)
+    {
+        worker->lastEndDiff = lastStart;
+    }
+    DoDiffs();
+
 }
 
 void SyncManager::DoDiffs()
@@ -88,15 +102,11 @@ void SyncManager::DoSync()
 
 void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataManager& sourceManager, DataManager& destManager)
 {
+    if(!diffResult.first.empty() || !diffResult.second.empty())
+        cout << destManager.GetName() << " syncing from " << sourceManager.GetName() << "\n";
     if(!diffResult.first.empty())
     {
-        cout << sourceManager.GetName() << " new files:\n";
-        for(auto& filename : diffResult.first)
-        {
-            cout  << "  - " << filename << "\n";
-        }
 
-        cout << destManager.GetName() << " syncing\n";
         for(auto& filename : diffResult.first)
         {
             if(destManager.GetDataHandles().count(filename) == 0)
@@ -110,12 +120,6 @@ void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataMa
     }
     if(!diffResult.second.empty())
     {
-        cout << sourceManager.GetName() << " removed files:\n";
-        for(auto& filename : diffResult.second)
-        {
-            cout  << "  - " << filename << "\n";
-        }
-        cout << destManager.GetName() << " syncing\n";
         for(auto& filename : diffResult.second)
         {
             if(destManager.GetDataHandles().count(filename) > 0)

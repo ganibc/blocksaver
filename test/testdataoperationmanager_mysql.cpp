@@ -14,7 +14,7 @@ TEST(MySQLDataOperationManager, GetList)
     ASSERT_NE(conn, nullptr);
     ASSERT_NE(mysql_real_connect(conn, server, user, password, database, 0, NULL, 0), nullptr);
 
-    MysqlDataOperationManager manager(conn, "filedata");
+    MysqlDataOperationManager manager(conn, "filedatatest");
 
     manager.DeleteData("someid");
     std::string valueStr = "some string to insert";
@@ -38,7 +38,7 @@ TEST(MySQLDataOperationManager, GetList)
 //  This is to prepare data based on common test cases (see testdataoperationmanager_common.cpp)
 void InitTestData(MYSQL* conn)
 {
-    MysqlDataOperationManager manager(conn, "filedata");
+    MysqlDataOperationManager manager(conn, "filedatatest");
     ASSERT_NE(manager.StoreData("correct.empty.txt", std::vector<char>()), nullptr);    
     std::string correct_number_txt_str = "12345566";
     ASSERT_NE(manager.StoreData("correct.number.txt", std::vector<char>(correct_number_txt_str.begin(), correct_number_txt_str.end())), nullptr);    
@@ -48,7 +48,7 @@ void InitTestData(MYSQL* conn)
 
 void RemoveTestData(MYSQL* conn)
 {
-    MysqlDataOperationManager manager(conn, "filedata");
+    MysqlDataOperationManager manager(conn, "filedatatest");
     EXPECT_TRUE(manager.DeleteData("correct.txt"));
     EXPECT_TRUE(manager.DeleteData("correct.number.txt"));
     EXPECT_TRUE(manager.DeleteData("correct.empty.txt"));
@@ -63,7 +63,7 @@ TEST(MySQLDataOperationManager, Ready)
 
     InitTestData(conn);
 
-    MysqlDataOperationManager manager(conn, "filedata");
+    MysqlDataOperationManager manager(conn, "filedatatest");
     CheckReadyToLoad(manager);
 
     RemoveTestData(conn);
@@ -77,7 +77,7 @@ TEST(MySQLDataOperationManager, Content)
 
     InitTestData(conn);
 
-    MysqlDataOperationManager manager(conn, "filedata");
+    MysqlDataOperationManager manager(conn, "filedatatest");
     CheckContents(manager);
 
     RemoveTestData(conn);
@@ -91,7 +91,7 @@ TEST(MySQLDataOperationManager, SaveDelete)
 
     InitTestData(conn);
 
-    MysqlDataOperationManager manager(conn, "filedata");
+    MysqlDataOperationManager manager(conn, "filedatatest");
     CheckSaveDelete(manager);
 
     RemoveTestData(conn);
