@@ -2,14 +2,17 @@
 
 using namespace std;
 
-DataHandlerLoadOperationMysql::DataHandlerLoadOperationMysql(MYSQL* connection, std::string id)
+DataHandlerLoadOperationMysql::DataHandlerLoadOperationMysql(MYSQL* connection, std::string id, std::string tableName)
     : m_Connection(connection)
     , m_ID(id)
+    , m_TableName(tableName)
 {
     m_Statement = mysql_stmt_init(m_Connection);
     m_StatementCloser.statement = m_Statement;
 
-    string selectStatement = "SELECT data FROM filedata WHERE id=?";
+    stringstream ss;
+    ss << "SELECT data FROM " << m_TableName << " WHERE id=?";
+    string selectStatement(ss.str());
     mysql_stmt_prepare(m_Statement, selectStatement.c_str(), selectStatement.length());
 
     memset(m_BindParam, 0, sizeof(m_BindParam));
@@ -74,7 +77,10 @@ bool MysqlDataOperationManager::IsExists(const std::string& id) const
     StatementCloser closer;
     closer.statement = selectStatement;
 
-    std::string statementStr("SELECT id FROM filedata WHERE id=?");
+    stringstream ss;
+    ss << "SELECT id FROM " << m_TableName << " WHERE id=?";
+
+    std::string statementStr(ss.str());
     if(mysql_stmt_prepare(selectStatement, statementStr.c_str(), statementStr.length()))
     {
         return false;
@@ -106,7 +112,7 @@ std::unique_ptr<DataHandler> MysqlDataOperationManager::GetDataHandler(std::stri
 
     if(IsExists(id))
     {
-        auto mysqlOperation = new DataHandlerLoadOperationMysql(m_Connection, id);
+        auto mysqlOperation = new DataHandlerLoadOperationMysql(m_Connection, id, m_TableName);
         result = make_unique<DataHandler>(mysqlOperation);
     }
 
@@ -122,7 +128,9 @@ std::vector<std::string> MysqlDataOperationManager::GetDataList(std::regex regex
     StatementCloser closer;
     closer.statement = selectStatement;
 
-    std::string statementStr("SELECT id FROM filedata");
+    stringstream ss;
+    ss << "SELECT id FROM " << m_TableName;
+    std::string statementStr(ss.str());
     if(mysql_stmt_prepare(selectStatement, statementStr.c_str(), statementStr.length()))
     {
         return result;
@@ -170,7 +178,9 @@ std::unique_ptr<DataHandler> MysqlDataOperationManager::StoreData(std::string id
     StatementCloser closer;
     closer.statement = insertStatement;
     
-    std::string insertStatementStr("INSERT INTO filedata(id, data) VALUES (?, ?)");
+    stringstream ss;
+    ss << "INSERT INTO " << m_TableName << "(id, data) VALUES (?, ?)";
+    std::string insertStatementStr(ss.str());
     if(mysql_stmt_prepare(insertStatement, insertStatementStr.c_str(), insertStatementStr.length()))
     {
         return result;
@@ -201,7 +211,7 @@ std::unique_ptr<DataHandler> MysqlDataOperationManager::StoreData(std::string id
         return result;
     }
 
-    auto mysqlOperation = new DataHandlerLoadOperationMysql(m_Connection, id);
+    auto mysqlOperation = new DataHandlerLoadOperationMysql(m_Connection, id, m_TableName);
     result = make_unique<DataHandler>(mysqlOperation, std::move(data));
 
     return result;
@@ -213,7 +223,9 @@ bool MysqlDataOperationManager::DeleteData(const std::string& id)
     StatementCloser closer;
     closer.statement = deleteStatement;
     
-    std::string deleteStatementStr("DELETE FROM filedata WHERE id=?");
+    stringstream ss;
+    ss << "DELETE FROM " << m_TableName << " WHERE id=?";
+    std::string deleteStatementStr(ss.str());
     if(mysql_stmt_prepare(deleteStatement, deleteStatementStr.c_str(), deleteStatementStr.length()))
     {
         return false;

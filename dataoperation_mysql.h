@@ -35,10 +35,11 @@ public:
 
 private:
     friend class MysqlDataOperationManager;
-    DataHandlerLoadOperationMysql(MYSQL* connection, std::string id);
+    DataHandlerLoadOperationMysql(MYSQL* connection, std::string id, std::string tableName);
 
     MYSQL* m_Connection;
     std::string m_ID;
+    std::string m_TableName;
     MYSQL_STMT* m_Statement;
     MYSQL_BIND m_BindParam[1];
     StatementCloser m_StatementCloser;

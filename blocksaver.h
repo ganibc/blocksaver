@@ -60,7 +60,7 @@ public:
         MYSQL* conn = mysql_init(NULL);
         mysql_real_connect(conn, "localhost", "root", "Hello@123", "testing", 0, NULL, 0);
 
-        auto mysqlOperationManager = new MysqlDataOperationManager(conn, "");
+        auto mysqlOperationManager = new MysqlDataOperationManager(conn, "filedata");
         auto manager3 = new DataManager(mysqlOperationManager);
         manager2->SetName("Manager mysql");
 
@@ -70,16 +70,6 @@ public:
         m_syncManager.AddWorker(manager3, std::chrono::milliseconds(1000));
 
         m_syncManager.Run();
-
-        // while(m_Run)
-        // {
-        //     auto diffResult = manager.DiffDataHandles();
-        //     auto diffResult2 = manager2.DiffDataHandles();
-        //     Sync(diffResult, manager, manager2);
-        //     Sync(diffResult2, manager2, manager);
-
-        //     this_thread::sleep_for(std::chrono::milliseconds(500));
-        // }
     }
 
     SyncManager m_syncManager;
