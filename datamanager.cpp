@@ -8,11 +8,6 @@
 
 using namespace std;
 
-
-
-
-
-
 DataManager::DataManager(DataOperationManagerBase* operationManager)
     : m_FileOperationManager(operationManager)
 {
