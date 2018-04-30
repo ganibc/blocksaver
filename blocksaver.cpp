@@ -10,6 +10,25 @@ void SyncWorker::DoDiffs()
         diffResult = dataManager->DiffDataHandles();
         lastEndDiff = std::chrono::system_clock::now();
     }
+    if(!diffResult.first.empty())
+    {
+        //  TODO: change cout to Log after merge with btcpool
+        cout << "new file detected on " << dataManager->GetName() << "\n";
+        for(auto& filename : diffResult.first)
+        {
+            cout << "- " << filename << "\n";
+        }
+    }
+    if(!diffResult.second.empty())
+    {
+        //  TODO: change cout to Log after merge with btcpool
+        cout << "remove file detected on " << dataManager->GetName() << "\n";
+        for(auto& filename : diffResult.second)
+        {
+            cout << "- " << filename << "\n";
+        }
+    }
+    
 }
 
 SyncManager::SyncManager()
@@ -24,7 +43,8 @@ void SyncManager::Run()
 
     //  loop every 500 ms
     std::chrono::milliseconds loopPeriod(500);
-    auto lastStart = std::chrono::system_clock::now();            
+    auto lastStart = std::chrono::system_clock::now();
+    DoInit();
 
     //  if re-create threads every loop is not fast enough, then might need to write thread pool
     while(m_KeepRun)
@@ -54,24 +74,26 @@ void SyncManager::AddWorker(DataManager* dataManager, std::chrono::duration<doub
     SyncWorker* worker = new SyncWorker;
     worker->dataManager = std::unique_ptr<DataManager>(dataManager);
     worker->diffPeriod = diffPeriod;
-    m_workers.emplace_back(worker);
+    m_Workers.emplace_back(worker);
 }
 
 void SyncManager::DoInit()
 {
+    cout << "First initialize\n";
     auto lastStart = std::chrono::system_clock::now() - std::chrono::hours(24);            
-    for(auto& worker : m_workers)
+    for(auto& worker : m_Workers)
     {
         worker->lastEndDiff = lastStart;
     }
     DoDiffs();
-
+    DoSync();
+    cout << "First initialize done\n";
 }
 
 void SyncManager::DoDiffs()
 {
     std::vector<std::unique_ptr<std::thread>> workerThreads;
-    for(auto& worker : m_workers)
+    for(auto& worker : m_Workers)
     {
         workerThreads.push_back(make_unique<std::thread>(&SyncWorker::DoDiffs, worker.get()));
     }
@@ -79,34 +101,38 @@ void SyncManager::DoDiffs()
     for(auto& t : workerThreads)
     {
         t->join();
-    }
+    }    
 }
 
 void SyncManager::DoSync()
 {
-    int workerCount = m_workers.size();
+    int workerCount = m_Workers.size();
     for(int i = 0; i < workerCount - 1; ++i)
     {
-        auto& worker1 = m_workers[i];
+        auto& worker1 = m_Workers[i];
         auto& manager1 = worker1->dataManager;
         for(int j = i + 1; j < workerCount; ++j )
         {
-            auto& worker2 = m_workers[j];
+            auto& worker2 = m_Workers[j];
             auto& manager2 = worker2->dataManager;
             Sync(worker1->diffResult, *manager1.get(), *manager2.get());
             Sync(worker2->diffResult, *manager2.get(), *manager1.get());
         }
     }
-
+    for(auto& worker : m_Workers)
+    {
+        worker->diffResult.first.clear();
+        worker->diffResult.second.clear();
+    }
 }
 
 void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataManager& sourceManager, DataManager& destManager)
 {
     if(!diffResult.first.empty() || !diffResult.second.empty())
-        cout << destManager.GetName() << " syncing from " << sourceManager.GetName() << "\n";
+        //  TODO: change cout to Log after merge with btcpool
+        cout << "try sync from " << sourceManager.GetName() << " to " << destManager.GetName() << "\n";
     if(!diffResult.first.empty())
     {
-
         for(auto& filename : diffResult.first)
         {
             if(destManager.GetDataHandles().count(filename) == 0)
@@ -114,7 +140,8 @@ void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataMa
                 auto& loader = sourceManager.GetDataHandles().at(filename);
                 loader->Load();
                 destManager.AddData(filename, loader->GiveupData());
-                cout  << "  - " << filename << " copied\n";
+                //  TODO: change cout to Log after merge with btcpool
+                cout << "  - " << filename << " copied\n";
             }
         }
     }
@@ -125,7 +152,8 @@ void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataMa
             if(destManager.GetDataHandles().count(filename) > 0)
             {
                 destManager.RemoveData(filename);
-                cout  << "  - " << filename << " removed\n";
+                //  TODO: change cout to Log after merge with btcpool
+                cout << "  - " << filename << " removed\n";
             }
         }                
     }

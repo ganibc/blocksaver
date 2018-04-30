@@ -42,7 +42,7 @@ private:
     void Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataManager& sourceManager, DataManager& destManager);
 
 private:
-    std::vector<std::unique_ptr<SyncWorker>> m_workers;
+    std::vector<std::unique_ptr<SyncWorker>> m_Workers;
     bool m_KeepRun;
 };
 
