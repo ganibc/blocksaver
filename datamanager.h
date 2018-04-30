@@ -34,14 +34,24 @@ public:
         return m_Name;
     }
 
-    const std::unordered_map<std::string, std::shared_ptr<DataHandler>>& GetDataHandles() const
+    const std::unordered_map<std::string, std::shared_ptr<DataHandler>>& GetDataHandlers() const
     {
-        return m_DataHandles;
+        return m_DataHandlers;
+    }
+
+    std::shared_ptr<DataHandler> GetDataHandler(const std::string& id) const
+    {
+        auto iter = m_DataHandlers.find(id);
+        if(iter != m_DataHandlers.end())
+        {
+            return iter->second;
+        }
+        return std::shared_ptr<DataHandler>();
     }
 private:
     // std::unique_ptr<FileLister> m_FileLister;
     std::unique_ptr<DataOperationManagerBase> m_FileOperationManager;
-    std::unordered_map<std::string, std::shared_ptr<DataHandler>> m_DataHandles;
+    std::unordered_map<std::string, std::shared_ptr<DataHandler>> m_DataHandlers;
     std::string m_Name;
 };
 

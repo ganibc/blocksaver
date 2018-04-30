@@ -101,7 +101,7 @@ void SyncManager::DoDiffs()
     for(auto& t : workerThreads)
     {
         t->join();
-    }    
+    }
 }
 
 void SyncManager::DoSync()
@@ -119,8 +119,22 @@ void SyncManager::DoSync()
             Sync(worker2->diffResult, *manager2.get(), *manager1.get());
         }
     }
+
+    //  cleanup. 
+    //  Unload to free memory
+    //  clear the results for the next syncs
     for(auto& worker : m_Workers)
     {
+        auto& manager = *worker->dataManager.get();
+        auto& newFiles = worker->diffResult.first;
+        for(auto& filename : newFiles)
+        {
+            auto loader = manager.GetDataHandler(filename);
+            if(loader != nullptr)
+            {
+                loader->Unload();
+            }
+        }
         worker->diffResult.first.clear();
         worker->diffResult.second.clear();
     }
@@ -135,13 +149,17 @@ void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataMa
     {
         for(auto& filename : diffResult.first)
         {
-            if(destManager.GetDataHandles().count(filename) == 0)
+            if(destManager.GetDataHandlers().count(filename) == 0)
             {
-                auto& loader = sourceManager.GetDataHandles().at(filename);
-                loader->Load();
-                destManager.AddData(filename, loader->GiveupData());
-                //  TODO: change cout to Log after merge with btcpool
-                cout << "  - " << filename << " copied\n";
+                auto loader = sourceManager.GetDataHandler(filename);
+                if(loader != nullptr)
+                {
+                    loader->Load();
+                    auto dataSize = loader->GetData().size();
+                    destManager.AddData(filename, loader->GiveupData());
+                    //  TODO: change cout to Log after merge with btcpool
+                    cout << "  - " << filename << " copied. size: " << dataSize << " bytes\n";
+                }
             }
         }
     }
@@ -149,7 +167,7 @@ void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataMa
     {
         for(auto& filename : diffResult.second)
         {
-            if(destManager.GetDataHandles().count(filename) > 0)
+            if(destManager.GetDataHandlers().count(filename) > 0)
             {
                 destManager.RemoveData(filename);
                 //  TODO: change cout to Log after merge with btcpool
