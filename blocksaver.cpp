@@ -163,7 +163,7 @@ void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataMa
             }
         }
     }
-    if(!diffResult.second.empty())
+    if(destManager.IsSyncDelete() && !diffResult.second.empty())
     {
         for(auto& filename : diffResult.second)
         {

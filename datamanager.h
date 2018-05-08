@@ -48,11 +48,22 @@ public:
         }
         return std::shared_ptr<DataHandler>();
     }
+
+    void EnableSyncDelete(bool b)
+    {
+        m_syncDelete = b;
+    }
+    
+    bool IsSyncDelete() const
+    {
+        return m_syncDelete;
+    }
+
 private:
-    // std::unique_ptr<FileLister> m_FileLister;
     std::unique_ptr<DataOperationManagerBase> m_FileOperationManager;
     std::unordered_map<std::string, std::shared_ptr<DataHandler>> m_DataHandlers;
     std::string m_Name;
+    bool m_syncDelete;
 };
 
 #endif // BLOCK_SAVER_H_

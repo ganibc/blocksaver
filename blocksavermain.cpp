@@ -34,7 +34,7 @@ DataManager* CreateMySQLDataManagerFromSettings(const libconfig::Setting& settin
     std::string server;
     std::string username, password;
     std::string dbschema;
-    std::string tablename;
+    std::string tablename = "filedata";
     int port = 0;
     if(!setting.lookupValue("server", server))
     {
@@ -52,10 +52,7 @@ DataManager* CreateMySQLDataManagerFromSettings(const libconfig::Setting& settin
     {
         return nullptr;
     }
-    if(!setting.lookupValue("tablename", tablename))
-    {
-        return nullptr;
-    }
+    setting.lookupValue("tablename", tablename);
     setting.lookupValue("port", port);
 
     auto mysqlOperationManager = new MysqlDataOperationManager(server, username, password, dbschema, tablename, port);
@@ -74,13 +71,16 @@ DataManager* CreateDataManagerFromSettings(const libconfig::Setting& setting)
     }
     else if(workerType == "mysql")
     {
-        result =CreateMySQLDataManagerFromSettings(setting);
+        result = CreateMySQLDataManagerFromSettings(setting);
     } 
     if(result)
     {
         string name;
         setting.lookupValue("name", name);
+        bool syncDelete = true;
+        setting.lookupValue("syncdelete", syncDelete);
         result->SetName(std::move(name));
+        result->EnableSyncDelete(syncDelete);
     }
     return result;
 }
