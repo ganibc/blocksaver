@@ -156,9 +156,17 @@ void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataMa
                 {
                     loader->Load();
                     auto dataSize = loader->GetData().size();
-                    destManager.AddData(filename, loader->GiveupData());
-                    //  TODO: change cout to Log after merge with btcpool
-                    cout << "  - " << filename << " copied. size: " << dataSize << " bytes\n";
+                    auto startTime = chrono::system_clock::now();
+                    if(destManager.AddData(filename, loader->GiveupData()))
+                    {
+                        //  TODO: change cout to Log after merge with btcpool
+                        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(chrono::system_clock::now() - startTime);
+                        cout << "  - " << filename << " copied. size: " << dataSize << " bytes. time: " << duration.count() << " ms\n";
+                    }
+                    else
+                    {
+                        cout << "  - " << filename << " copy failed\n";
+                    }
                 }
             }
         }
@@ -169,9 +177,11 @@ void SyncManager::Sync(DataManager::AddAndRemoveDataListPair& diffResult, DataMa
         {
             if(destManager.GetDataHandlers().count(filename) > 0)
             {
+                auto startTime = chrono::system_clock::now();
                 destManager.RemoveData(filename);
+                auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(chrono::system_clock::now() - startTime);
+                cout << "  - " << filename << " removed. time: " << duration.count() << " ms\n";
                 //  TODO: change cout to Log after merge with btcpool
-                cout << "  - " << filename << " removed\n";
             }
         }                
     }

@@ -1,4 +1,5 @@
 #include "dataoperation_mysql.h"
+#include <iostream>
 
 using namespace std;
 
@@ -196,7 +197,6 @@ std::unique_ptr<DataHandler> MysqlDataOperationManager::StoreData(std::string id
         //  TODO: warning file existed and not force overwrite
         return result;
     }
-    
     MYSQL_STMT* insertStatement = mysql_stmt_init(m_Connection);
     StatementCloser closer;
     closer.statement = insertStatement;
@@ -229,8 +229,23 @@ std::unique_ptr<DataHandler> MysqlDataOperationManager::StoreData(std::string id
         return result;
     }
 
+    // const unsigned long _maxChuckSize = 1000000;
+    // unsigned long dataLen = data.size();
+    // unsigned long offset = 0;
+    // while(offset < dataLen)
+    // {
+    //     if (mysql_stmt_send_long_data(insertStatement, 1, data.data() + offset, std::min(dataLen - offset, _maxChuckSize)))
+    //     {
+    //         // fprintf(stderr, "\n send_long_data failed");
+    //         // fprintf(stderr, "\n %s", mysql_stmt_error(insertStatement));
+    //         return result;
+    //     }
+    //     offset += _maxChuckSize;
+    // }
+
     if (mysql_stmt_execute(insertStatement))
     {
+        std::cout << "execute err: " << mysql_stmt_error(insertStatement) << "\n";
         return result;
     }
 
